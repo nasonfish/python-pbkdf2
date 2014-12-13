@@ -42,9 +42,10 @@
 """
 import hmac
 import hashlib
+import binascii
 from struct import Struct
 from operator import xor
-from itertools import izip, starmap
+from itertools import starmap
 
 
 _pack_int = Struct('>I').pack
@@ -52,7 +53,7 @@ _pack_int = Struct('>I').pack
 
 def pbkdf2_hex(data, salt, iterations=1000, keylen=24, hashfunc=None):
     """Like :func:`pbkdf2_bin` but returns a hex encoded string."""
-    return pbkdf2_bin(data, salt, iterations, keylen, hashfunc).encode('hex')
+    return binascii.hexlify(pbkdf2_bin(data, salt, iterations, keylen, hashfunc)).decode('utf-8')
 
 
 def pbkdf2_bin(data, salt, iterations=1000, keylen=24, hashfunc=None):
@@ -62,19 +63,23 @@ def pbkdf2_bin(data, salt, iterations=1000, keylen=24, hashfunc=None):
     a different hashlib `hashfunc` can be provided.
     """
     hashfunc = hashfunc or hashlib.sha1
+    if type(data) == str:
+        data = data.encode('utf-8')
+    if type(salt) == str:
+        salt = salt.encode('utf-8')
     mac = hmac.new(data, None, hashfunc)
     def _pseudorandom(x, mac=mac):
         h = mac.copy()
         h.update(x)
-        return map(ord, h.digest())
+        return list(h.digest())
     buf = []
-    for block in xrange(1, -(-keylen // mac.digest_size) + 1):
+    for block in range(1, -(-keylen // mac.digest_size) + 1):
         rv = u = _pseudorandom(salt + _pack_int(block))
-        for i in xrange(iterations - 1):
-            u = _pseudorandom(''.join(map(chr, u)))
-            rv = starmap(xor, izip(rv, u))
+        for i in range(iterations - 1):
+            u = _pseudorandom(bytes(u))
+            rv = starmap(xor, zip(rv, u))
         buf.extend(rv)
-    return ''.join(map(chr, buf))[:keylen]
+    return bytes(buf)[:keylen]
 
 
 def test():
@@ -82,14 +87,14 @@ def test():
     def check(data, salt, iterations, keylen, expected):
         rv = pbkdf2_hex(data, salt, iterations, keylen)
         if rv != expected:
-            print 'Test failed:'
-            print '  Expected:   %s' % expected
-            print '  Got:        %s' % rv
-            print '  Parameters:'
-            print '    data=%s' % data
-            print '    salt=%s' % salt
-            print '    iterations=%d' % iterations
-            print
+            print('Test failed:')
+            print('  Expected:   %s' % expected)
+            print('  Got:        %s' % rv)
+            print('  Parameters:')
+            print('    data=%s' % data)
+            print('    salt=%s' % salt)
+            print('    iterations=%d' % iterations)
+            print()
             failed.append(1)
 
     # From RFC 6070
